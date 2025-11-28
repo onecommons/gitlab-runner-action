@@ -4,11 +4,12 @@
   "description": "Runs a gitlab runner",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "ncc build index.js -o dist"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/edersonbrilhante/gitlab-runner-action.git"
+    "url": "git+https://github.com/onecommons/gitlab-runner-action.git"
   },
   "keywords": [],
   "author": {
@@ -17,12 +18,15 @@
   },
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/edersonbrilhante/gitlab-runner-action/issues"
+    "url": "https://github.com/onecommons/gitlab-runner-action/issues"
   },
-  "homepage": "https://github.com/edersonbrilhante/gitlab-runner-action#readme",
+  "homepage": "https://github.com/onecommons/gitlab-runner-action#readme",
   "dependencies": {
     "@actions/core": "^1.2.6",
-    "@actions/exec": "^1.0.4"
+    "@actions/exec": "^1.0.4",
+    "@iarna/toml": "^2.2.5"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@vercel/ncc": "^0.38.1"
+  }
 }

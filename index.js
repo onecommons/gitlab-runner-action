@@ -1,8 +1,10 @@
 const core = require('@actions/core');
 const { exec } = require('@actions/exec');
 const path = require("path");
+const fs = require("fs");
+const TOML = require('@iarna/toml');
 
-async function registerRunnerCmd() {
+async function registerRunnerCmd(concurrent) {
   let cmdArgs = [];
   cmdArgs.push(`--rm`)
   cmdArgs.push(`-v`, `/srv/gitlab-runner/config:/etc/gitlab-runner`)
@@ -15,12 +17,30 @@ async function registerRunnerCmd() {
   cmdArgs.push(`--registration-token`, core.getInput('registration-token'))
   cmdArgs.push(`--name`, core.getInput('name'))
   cmdArgs.push(`--tag-list`, core.getInput('tag-list'))
+  cmdArgs.push(`--request-concurrency`, concurrent)
   cmdArgs.push(`--docker-privileged`, true)
   cmdArgs.push(`--locked="false"`)
   cmdArgs.push(`--access-level="${core.getInput('access-level')}"`)
   cmdArgs.push(`--run-untagged="${core.getInput('run-untagged')}"`)
 
   await exec('docker run', cmdArgs);
+}
+
+async function setConcurrent(concurrent) {
+  const configPath = '/srv/gitlab-runner/config/config.toml';
+
+  // Modify the config.toml file created by registerRunnerCmd()
+  // The register command creates config.toml with "concurrent = 1" by default
+  const configContent = fs.readFileSync(configPath, 'utf8');
+
+  // Parse the TOML file
+  const config = TOML.parse(configContent);
+
+  // Update the concurrent value
+  config.concurrent = parseInt(concurrent);
+
+  // Stringify and write it back
+  fs.writeFileSync(configPath, TOML.stringify(config), 'utf8');
 }
 
 async function unregisterRunnerCmd() {
@@ -54,15 +74,27 @@ async function stopRunnerCmd() {
   await exec('docker rm ', cmdArgs);
 }
 
+async function waitTimeout(){
+  const timeout = parseInt(core.getInput('timeout')) * 1000; // Convert to milliseconds
+  return new Promise(resolve => setTimeout(resolve, timeout));
+}
+
 async function checkJob(){
   await exec(`${path.resolve(__dirname, "dist")}/check-job.sh`)
 }
 
 async function registerRunner() {
   try{
-    await registerRunnerCmd()
+    const exitAfterJob = core.getInput('exit-after-job') === 'true';
+    const concurrent = exitAfterJob ? '1' : core.getInput('concurrent');
+    await registerRunnerCmd(concurrent)
+    await setConcurrent(concurrent)
     await startRunnerCmd()
-    await checkJob()
+    if (exitAfterJob) {
+      await checkJob()
+    } else {
+      await waitTimeout()
+    }
   }finally{
     await unregisterRunner()
   }

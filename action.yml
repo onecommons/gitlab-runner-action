@@ -30,6 +30,18 @@ inputs:
     description: 'Parameter to create or not a protected runner'
     required: false
     default: "not_protected"
+  concurrent:
+    description: 'Maximum number of jobs that can run concurrently'
+    required: false
+    default: '4'
+  timeout:
+    description: 'Timeout in seconds for how long the runner should stay active (ignored if exit-after-job is true)'
+    required: false
+    default: '3600'
+  exit-after-job:
+    description: 'Exit after first job completes instead of waiting for timeout'
+    required: false
+    default: 'false'
 runs:
   using: 'node12'
   main: 'dist/index.js'
