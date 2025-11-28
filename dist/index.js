@@ -3829,9 +3829,11 @@ const fs = __nccwpck_require__(896);
 const TOML = __nccwpck_require__(572);
 
 async function registerRunnerCmd(concurrent) {
+  const configDir = process.env.RUNNER_TEMP || '/tmp';
+
   let cmdArgs = [];
   cmdArgs.push(`--rm`)
-  cmdArgs.push(`-v`, `/srv/gitlab-runner/config:/etc/gitlab-runner`)
+  cmdArgs.push(`-v`, `${configDir}:/etc/gitlab-runner`)
   cmdArgs.push(`gitlab/gitlab-runner`)
   cmdArgs.push(`register`)
   cmdArgs.push(`--non-interactive`)
@@ -3852,27 +3854,13 @@ async function registerRunnerCmd(concurrent) {
 
 async function setConcurrent(concurrent) {
   try {
-    const tempDir = process.env.RUNNER_TEMP || '/tmp';
-    const tempFile = path.join(tempDir, 'config.toml');
-    const configPath = '/etc/gitlab-runner/config.toml';
+    const configDir = process.env.RUNNER_TEMP || '/tmp';
+    const configPath = path.join(configDir, 'config.toml');
 
-    core.info(`Setting concurrent to ${concurrent}`);
+    core.info(`Setting concurrent to ${concurrent} in ${configPath}`);
 
-    // Copy config.toml from the Docker volume to a temp file we can read
-    // Also change ownership to current user
-    let copyOutArgs = [
-      '--rm',
-      '-v', '/srv/gitlab-runner/config:/etc/gitlab-runner',
-      '-v', `${tempDir}:/workspace`,
-      'alpine',
-      'sh', '-c',
-      `cp ${configPath} /workspace/config.toml && chmod 666 /workspace/config.toml`
-    ];
-    await exec('docker run', copyOutArgs);
-    core.info(`Copied config file to temp location`);
-
-    // Read and parse the TOML file
-    const configContent = fs.readFileSync(tempFile, 'utf8');
+    // Read and parse the TOML file created by registerRunnerCmd()
+    const configContent = fs.readFileSync(configPath, 'utf8');
     const config = TOML.parse(configContent);
     core.info(`Parsed TOML successfully`);
 
@@ -3880,35 +3868,22 @@ async function setConcurrent(concurrent) {
     config.concurrent = parseInt(concurrent);
     core.info(`Updated concurrent to ${config.concurrent}`);
 
-    // Stringify and write to temp file
+    // Stringify and write it back
     const newContent = TOML.stringify(config);
-    fs.writeFileSync(tempFile, newContent, 'utf8');
-    core.info(`Wrote updated config to temp file`);
-
-    // Copy temp file back to the Docker volume
-    let copyInArgs = [
-      '--rm',
-      '-v', '/srv/gitlab-runner/config:/etc/gitlab-runner',
-      '-v', `${tempDir}:/workspace`,
-      'alpine',
-      'cp', '/workspace/config.toml', configPath
-    ];
-    await exec('docker run', copyInArgs);
-    core.info(`Copied config file back to volume`);
-
-    // Clean up temp file
-    fs.unlinkSync(tempFile);
+    fs.writeFileSync(configPath, newContent, 'utf8');
+    core.info(`Wrote updated config file successfully`);
   } catch (error) {
     core.error(`Error in setConcurrent: ${error.message}`);
-    core.error(`Stack trace: ${error.stack}`);
     throw error;
   }
 }
 
 async function unregisterRunnerCmd() {
+  const configDir = process.env.RUNNER_TEMP || '/tmp';
+
   let cmdArgs = [];
   cmdArgs.push(`--rm`)
-  cmdArgs.push(`-v`, `/srv/gitlab-runner/config:/etc/gitlab-runner`)
+  cmdArgs.push(`-v`, `${configDir}:/etc/gitlab-runner`)
   cmdArgs.push(`gitlab/gitlab-runner`)
   cmdArgs.push(`unregister`)
   cmdArgs.push(`--name`, core.getInput('name'))
@@ -3917,11 +3892,13 @@ async function unregisterRunnerCmd() {
 }
 
 async function startRunnerCmd() {
+  const configDir = process.env.RUNNER_TEMP || '/tmp';
+
   let cmdArgs = []
   cmdArgs.push(`-d`)
   cmdArgs.push(`--name`, `gitlab-runner`)
   cmdArgs.push(`--restart`, `always`)
-  cmdArgs.push(`-v`, `/srv/gitlab-runner/config:/etc/gitlab-runner`)
+  cmdArgs.push(`-v`, `${configDir}:/etc/gitlab-runner`)
   cmdArgs.push(`-v`, `/var/run/docker.sock:/var/run/docker.sock`)
   cmdArgs.push(`gitlab/gitlab-runner`)
 
