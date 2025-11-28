@@ -28,16 +28,18 @@ async function registerRunnerCmd(concurrent) {
 
 async function setConcurrent(concurrent) {
   try {
-    const configPath = '/srv/gitlab-runner/config/config.toml';
+    const tempFile = path.join(__dirname, 'config.toml');
+    const configPath = '/etc/gitlab-runner/config.toml';
 
-    core.info(`Setting concurrent to ${concurrent} in ${configPath}`);
+    core.info(`Setting concurrent to ${concurrent}`);
 
-    // Modify the config.toml file created by registerRunnerCmd()
-    // The register command creates config.toml with "concurrent = 1" by default
-    const configContent = fs.readFileSync(configPath, 'utf8');
-    core.info(`Read config file successfully, length: ${configContent.length} bytes`);
+    // Copy config.toml from the Docker volume to a temp file we can read
+    let copyOutArgs = ['--rm', '-v', '/srv/gitlab-runner/config:/etc/gitlab-runner', '-v', `${__dirname}:/workspace`, 'alpine', 'cp', configPath, '/workspace/config.toml'];
+    await exec('docker run', copyOutArgs);
+    core.info(`Copied config file to temp location`);
 
-    // Parse the TOML file
+    // Read and parse the TOML file
+    const configContent = fs.readFileSync(tempFile, 'utf8');
     const config = TOML.parse(configContent);
     core.info(`Parsed TOML successfully`);
 
@@ -45,10 +47,18 @@ async function setConcurrent(concurrent) {
     config.concurrent = parseInt(concurrent);
     core.info(`Updated concurrent to ${config.concurrent}`);
 
-    // Stringify and write it back
+    // Stringify and write to temp file
     const newContent = TOML.stringify(config);
-    fs.writeFileSync(configPath, newContent, 'utf8');
-    core.info(`Wrote updated config file successfully`);
+    fs.writeFileSync(tempFile, newContent, 'utf8');
+    core.info(`Wrote updated config to temp file`);
+
+    // Copy temp file back to the Docker volume
+    let copyInArgs = ['--rm', '-v', '/srv/gitlab-runner/config:/etc/gitlab-runner', '-v', `${__dirname}:/workspace`, 'alpine', 'cp', '/workspace/config.toml', configPath];
+    await exec('docker run', copyInArgs);
+    core.info(`Copied config file back to volume`);
+
+    // Clean up temp file
+    fs.unlinkSync(tempFile);
   } catch (error) {
     core.error(`Error in setConcurrent: ${error.message}`);
     core.error(`Stack trace: ${error.stack}`);
