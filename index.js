@@ -28,13 +28,22 @@ async function registerRunnerCmd(concurrent) {
 
 async function setConcurrent(concurrent) {
   try {
-    const tempFile = path.join(__dirname, 'config.toml');
+    const tempDir = process.env.RUNNER_TEMP || '/tmp';
+    const tempFile = path.join(tempDir, 'config.toml');
     const configPath = '/etc/gitlab-runner/config.toml';
 
     core.info(`Setting concurrent to ${concurrent}`);
 
     // Copy config.toml from the Docker volume to a temp file we can read
-    let copyOutArgs = ['--rm', '-v', '/srv/gitlab-runner/config:/etc/gitlab-runner', '-v', `${__dirname}:/workspace`, 'alpine', 'cp', configPath, '/workspace/config.toml'];
+    // Also change ownership to current user
+    let copyOutArgs = [
+      '--rm',
+      '-v', '/srv/gitlab-runner/config:/etc/gitlab-runner',
+      '-v', `${tempDir}:/workspace`,
+      'alpine',
+      'sh', '-c',
+      `cp ${configPath} /workspace/config.toml && chmod 666 /workspace/config.toml`
+    ];
     await exec('docker run', copyOutArgs);
     core.info(`Copied config file to temp location`);
 
@@ -53,7 +62,13 @@ async function setConcurrent(concurrent) {
     core.info(`Wrote updated config to temp file`);
 
     // Copy temp file back to the Docker volume
-    let copyInArgs = ['--rm', '-v', '/srv/gitlab-runner/config:/etc/gitlab-runner', '-v', `${__dirname}:/workspace`, 'alpine', 'cp', '/workspace/config.toml', configPath];
+    let copyInArgs = [
+      '--rm',
+      '-v', '/srv/gitlab-runner/config:/etc/gitlab-runner',
+      '-v', `${tempDir}:/workspace`,
+      'alpine',
+      'cp', '/workspace/config.toml', configPath
+    ];
     await exec('docker run', copyInArgs);
     core.info(`Copied config file back to volume`);
 
