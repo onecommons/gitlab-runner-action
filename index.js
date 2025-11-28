@@ -27,20 +27,33 @@ async function registerRunnerCmd(concurrent) {
 }
 
 async function setConcurrent(concurrent) {
-  const configPath = '/srv/gitlab-runner/config/config.toml';
+  try {
+    const configPath = '/srv/gitlab-runner/config/config.toml';
 
-  // Modify the config.toml file created by registerRunnerCmd()
-  // The register command creates config.toml with "concurrent = 1" by default
-  const configContent = fs.readFileSync(configPath, 'utf8');
+    core.info(`Setting concurrent to ${concurrent} in ${configPath}`);
 
-  // Parse the TOML file
-  const config = TOML.parse(configContent);
+    // Modify the config.toml file created by registerRunnerCmd()
+    // The register command creates config.toml with "concurrent = 1" by default
+    const configContent = fs.readFileSync(configPath, 'utf8');
+    core.info(`Read config file successfully, length: ${configContent.length} bytes`);
 
-  // Update the concurrent value
-  config.concurrent = parseInt(concurrent);
+    // Parse the TOML file
+    const config = TOML.parse(configContent);
+    core.info(`Parsed TOML successfully`);
 
-  // Stringify and write it back
-  fs.writeFileSync(configPath, TOML.stringify(config), 'utf8');
+    // Update the concurrent value
+    config.concurrent = parseInt(concurrent);
+    core.info(`Updated concurrent to ${config.concurrent}`);
+
+    // Stringify and write it back
+    const newContent = TOML.stringify(config);
+    fs.writeFileSync(configPath, newContent, 'utf8');
+    core.info(`Wrote updated config file successfully`);
+  } catch (error) {
+    core.error(`Error in setConcurrent: ${error.message}`);
+    core.error(`Stack trace: ${error.stack}`);
+    throw error;
+  }
 }
 
 async function unregisterRunnerCmd() {
