@@ -3850,6 +3850,10 @@ async function registerRunnerCmd(concurrent) {
   cmdArgs.push(`--run-untagged="${core.getInput('run-untagged')}"`)
 
   await exec('docker run', cmdArgs);
+
+  // Fix permissions on the config file so Node.js can read/write it
+  let chmodArgs = ['--rm', '-v', `${configDir}:/etc/gitlab-runner`, 'alpine', 'chmod', '666', '/etc/gitlab-runner/config.toml'];
+  await exec('docker run', chmodArgs);
 }
 
 async function setConcurrent(concurrent) {
