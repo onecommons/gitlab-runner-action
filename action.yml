@@ -57,6 +57,9 @@ inputs:
     description: 'Exit after first job completes instead of waiting for timeout'
     required: false
     default: 'false'
+  pipeline-url:
+    description: 'GitLab API URL of a pipeline; exit when it finishes, failing unless it succeeded (timeout still applies)'
+    required: false
 runs:
   using: 'node24'
   main: 'dist/index.js'

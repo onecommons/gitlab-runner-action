@@ -3,6 +3,10 @@ const os = require('node:os');
 const path = require('node:path');
 const TOML = require('@iarna/toml');
 
+const PIPELINE_POLL_MS = 60 * 1000;
+// `manual` is a pipeline blocked on a person, which would hold the runner idle.
+const PIPELINE_FAILED = ['failed', 'canceled', 'skipped', 'manual'];
+
 function readOptions(actionCore, env = process.env) {
   const input = (name, fallback = '') => actionCore.getInput(name) || fallback;
   const integer = (name, fallback) => {
@@ -35,6 +39,9 @@ function readOptions(actionCore, env = process.env) {
   const name = input('name');
   if (!name) throw new Error('name is required');
   const exitAfterJob = boolean('exit-after-job', 'false');
+  const pipelineUrl = input('pipeline-url');
+  if (pipelineUrl && exitAfterJob) throw new Error('Set pipeline-url or exit-after-job, not both');
+  if (pipelineUrl && !/^https?:\/\//.test(pipelineUrl)) throw new Error('pipeline-url must be an http(s) URL');
   const concurrent = integer('concurrent', '4');
   const accessLevel = input('access-level', 'not_protected');
   if (!['not_protected', 'ref_protected'].includes(accessLevel)) {
@@ -52,6 +59,7 @@ function readOptions(actionCore, env = process.env) {
     concurrent: exitAfterJob ? 1 : concurrent,
     timeout: integer('timeout', '3600'),
     exitAfterJob,
+    pipelineUrl,
     tempDir: env.RUNNER_TEMP || os.tmpdir(),
     uid: process.getuid(),
     gid: process.getgid()
@@ -66,6 +74,7 @@ class Runner {
     this.output = dependencies.getExecOutput;
     this.sleep = dependencies.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms)));
     this.now = dependencies.now || Date.now;
+    this.fetch = dependencies.fetch || ((...args) => fetch(...args));
   }
 
   configMount() {
@@ -115,6 +124,7 @@ class Runner {
   async wait() {
     const o = this.options;
     const deadline = o.exitAfterJob ? Infinity : this.now() + o.timeout * 1000;
+    let nextPoll = this.now();
     while (this.now() < deadline) {
       const state = await this.output('docker', ['inspect', '--format', '{{.State.Running}}',
         o.containerName], { silent: true });
@@ -125,11 +135,44 @@ class Runner {
       if (o.exitAfterJob) {
         if (await this.jobCompleted(o.containerName)) return;
       }
+      if (o.pipelineUrl && this.now() >= nextPoll) {
+        if (await this.pipelineSucceeded()) return;
+        nextPoll = this.now() + PIPELINE_POLL_MS;
+      }
       await this.sleep(Math.min(5000, deadline - this.now()));
     }
     const state = await this.output('docker', ['inspect', '--format', '{{.State.Running}}',
       o.containerName], { silent: true });
     if (state.stdout.trim() !== 'true') throw new Error('The GitLab runner container stopped unexpectedly');
+    if (o.pipelineUrl && !(await this.pipelineSucceeded())) {
+      throw new Error(`The pipeline did not finish within ${o.timeout} seconds`);
+    }
+  }
+
+  // True once the pipeline succeeds; throws once it ends any other way. A
+  // failed request is retried at the next poll unless retrying can't help.
+  async pipelineSucceeded() {
+    let response;
+    try {
+      response = await this.fetch(this.options.pipelineUrl, { headers: { Accept: 'application/json' } });
+    } catch (error) {
+      this.core.warning(`Checking the pipeline failed: ${error.message}`);
+      return false;
+    }
+    if (!response.ok) {
+      const message = `Checking the pipeline failed: HTTP ${response.status}`;
+      if (response.status >= 400 && response.status < 500 && response.status !== 429) throw new Error(message);
+      this.core.warning(message);
+      return false;
+    }
+    const { status } = await response.json();
+    if (status !== this.pipelineStatus) {
+      this.core.info(`Pipeline ${status}`);
+      this.pipelineStatus = status;
+    }
+    if (status === 'success') return true;
+    if (PIPELINE_FAILED.includes(status)) throw new Error(`The pipeline ended ${status}`);
+    return false;
   }
 
   async jobCompleted(containerName) {

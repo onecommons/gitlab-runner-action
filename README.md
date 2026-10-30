@@ -1,6 +1,7 @@
 # Gitlab Runner Action
 This action starts a gitlab runner and registers it with the given gitlab instance.
-It can be configured to exit after the first job it receives or after a timeout.
+It can be configured to exit after the first job it receives, when a pipeline
+finishes, or after a timeout.
 
 ## Runner authentication tokens
 
@@ -23,9 +24,10 @@ token. The existing `registration-token` input also recognizes `glrt-` tokens.
 
 This action needs a Linux host with Docker and access to `/var/run/docker.sock`.
 It uses Node.js 24. Set the enclosing job's timeout longer than the action's
-timeout to allow cleanup. Timed mode stays active for the configured duration;
-it does not monitor the GitLab pipeline result. Single-job mode exits after a
-successful or failed job, and does not wait for an entire pipeline.
+timeout to allow cleanup. Timed mode stays active for the configured duration.
+With `pipeline-url`, it exits once that pipeline finishes and fails unless the
+pipeline succeeded; the timeout still bounds the wait. Single-job mode exits
+after a successful or failed job, and does not wait for an entire pipeline.
 
 Each invocation uses a private config directory and a unique container name.
 Cleanup stops the container and unregisters its runner manager on completion or
@@ -51,6 +53,7 @@ tokens, the server-side runner remains available for subsequent workflow runs.
 | `concurrent` | Maximum number of jobs that can run concurrently (automatically set to 1 if exit-after-job is true) | No | N/A | 4 |
 | `timeout` | Timeout in seconds for how long the runner should stay active (ignored if exit-after-job is true) | No | N/A | 3600 |
 | `exit-after-job` | Exit after first job completes instead of waiting for timeout (forces concurrent to 1) | No | true or false | false |
+| `pipeline-url` | GitLab API URL of a pipeline, `<instance>/api/v4/projects/<id>/pipelines/<id>`; exit when it finishes, failing unless it succeeded. Read without credentials, so the project's pipelines must be public | No | N/A | N/A |
 
 ## Example Workflows
 
@@ -70,6 +73,24 @@ jobs:
           name: ${{ github.run_id }}
           tag-list: "crosscicd"
           exit-after-job: "true"  # concurrent will be automatically set to 1
+```
+
+### Run Until a Pipeline Finishes
+Trigger a pipeline, then serve its jobs until it ends:
+```yaml
+      - name: Trigger the pipeline
+        id: trigger
+        run: |
+          id=$(curl --fail --form "token=$TRIGGER_TOKEN" --form ref=main \
+            https://gitlab.com/api/v4/projects/$PROJECT_ID/trigger/pipeline | jq -er .id)
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+      - name: Gitlab Runner
+        uses: onecommons/gitlab-runner-action@main
+        with:
+          runner-token: ${{ secrets.GITLAB_RUNNER_TOKEN }}
+          name: ${{ github.run_id }}
+          pipeline-url: https://gitlab.com/api/v4/projects/${{ env.PROJECT_ID }}/pipelines/${{ steps.trigger.outputs.id }}
+          timeout: '21000'  # an upper bound
 ```
 
 ### Long-running Runner with Concurrent Jobs

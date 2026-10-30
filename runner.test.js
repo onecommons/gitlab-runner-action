@@ -10,7 +10,7 @@ const { readOptions, Runner } = require('./runner');
 function inputs(values = {}) {
   return {
     getInput: name => ({ name: 'test runner', 'runner-token': 'glrt-test', ...values }[name] || ''),
-    setSecret() {}, warning() {}, saveState() {}
+    setSecret() {}, warning() {}, info() {}, saveState() {}
   };
 }
 
@@ -78,7 +78,9 @@ test('invalid inputs fail before registering a runner', () => {
     { concurrent: '0' }, { concurrent: '2jobs' }, { timeout: '-1' },
     { 'docker-privileged': 'yes' }, { 'registration-token': 'also-set' },
     { 'runner-token': '', 'registration-token': '' },
-    { 'runner-token': '', 'registration-token': 'legacy', 'tag-list': '' }
+    { 'runner-token': '', 'registration-token': 'legacy', 'tag-list': '' },
+    { 'pipeline-url': 'https://gitlab.example/api/v4/projects/1/pipelines/2', 'exit-after-job': 'true' },
+    { 'pipeline-url': 'gitlab.example/api/v4/projects/1/pipelines/2' }
   ]) assert.throws(() => readOptions(inputs(values)));
 });
 
@@ -156,6 +158,59 @@ test('single-job mode accepts only a completed job as an expected runner exit', 
     exitCode: 0, stdout: args[0] === 'inspect' ? 'false' : 'runner stopped', stderr: ''
   });
   await assert.rejects(runner.wait(), /stopped unexpectedly/);
+});
+
+const PIPELINE = 'https://gitlab.example/api/v4/projects/1/pipelines/2';
+
+// Answers each poll with the next of `replies`: a status, an HTTP code, or an Error.
+function pipelineReplies(runner, replies, polls) {
+  runner.fetch = async url => {
+    assert.equal(url, PIPELINE);
+    polls.push(runner.now());
+    const reply = replies[Math.min(polls.length, replies.length) - 1];
+    if (reply instanceof Error) throw reply;
+    if (typeof reply === 'number') return { ok: false, status: reply };
+    return { ok: true, status: 200, json: async () => ({ status: reply }) };
+  };
+}
+
+test('pipeline mode exits once the pipeline succeeds, polling once a minute', async t => {
+  const { runner } = fixture(t, { 'pipeline-url': PIPELINE, timeout: '3600' });
+  await runner.start();
+  const polls = [];
+  pipelineReplies(runner, ['pending', 'running', 'success'], polls);
+  await runner.wait();
+  assert.deepEqual(polls, [0, 60000, 120000]);
+});
+
+test('pipeline mode fails when the pipeline ends any other way', async t => {
+  for (const status of ['failed', 'canceled', 'skipped', 'manual']) {
+    const { runner } = fixture(t, { 'pipeline-url': PIPELINE });
+    await runner.start();
+    pipelineReplies(runner, ['running', status], []);
+    await assert.rejects(runner.wait(), new RegExp(`ended ${status}`));
+  }
+});
+
+test('pipeline mode retries failed requests unless retrying cannot help', async t => {
+  const { runner } = fixture(t, { 'pipeline-url': PIPELINE });
+  await runner.start();
+  const polls = [];
+  pipelineReplies(runner, [new Error('ECONNRESET'), 502, 429, 'success'], polls);
+  await runner.wait();
+  assert.equal(polls.length, 4);
+
+  pipelineReplies(runner, [404], []);
+  await assert.rejects(runner.wait(), /HTTP 404/);
+});
+
+test('pipeline mode fails when the pipeline outlasts the timeout', async t => {
+  const { runner } = fixture(t, { 'pipeline-url': PIPELINE, timeout: '150' });
+  await runner.start();
+  const polls = [];
+  pipelineReplies(runner, ['running'], polls);
+  await assert.rejects(runner.wait(), /did not finish within 150 seconds/);
+  assert.deepEqual(polls, [0, 60000, 120000, 150000]);
 });
 
 test('registration and startup failures still allow scoped unregister cleanup', async t => {
