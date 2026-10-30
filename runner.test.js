@@ -105,9 +105,25 @@ test('timed service waits until its deadline and detects a stopped runner', asyn
   const { runner, calls } = fixture(t, { timeout: '7' });
   await runner.start();
   await runner.wait();
-  assert.equal(calls.filter(call => call.args[0] === 'inspect').length, 2);
+  assert.equal(calls.filter(call => call.args[0] === 'inspect').length, 3);
   runner.output = async () => ({ exitCode: 0, stdout: 'false', stderr: '' });
   await assert.rejects(runner.wait(), /stopped unexpectedly/);
+});
+
+test('timed service detects a runner exit during the final polling interval', async t => {
+  const { runner, options, dependencies } = fixture(t, { timeout: '7' });
+  await runner.start();
+  let inspections = 0;
+  runner.output = async (_, args) => {
+    if (args[0] === 'inspect') {
+      inspections += 1;
+      return { exitCode: 0, stdout: inspections < 3 ? 'true' : 'false', stderr: '' };
+    }
+    return dependencies.getExecOutput(_, args);
+  };
+  await assert.rejects(runner.wait(), /stopped unexpectedly/);
+  assert.equal(inspections, 3);
+  assert.equal(options.timeout, 7);
 });
 
 test('single-job mode forces concurrency one and exits for successful or failed jobs', async t => {

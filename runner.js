@@ -127,6 +127,9 @@ class Runner {
       }
       await this.sleep(Math.min(5000, deadline - this.now()));
     }
+    const state = await this.output('docker', ['inspect', '--format', '{{.State.Running}}',
+      o.containerName], { silent: true });
+    if (state.stdout.trim() !== 'true') throw new Error('The GitLab runner container stopped unexpectedly');
   }
 
   async jobCompleted(containerName) {
