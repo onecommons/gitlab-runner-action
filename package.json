@@ -4,8 +4,8 @@
   "description": "Runs a gitlab runner",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "ncc build index.js -o dist --minify --license licenses.txt"
+    "test": "node --test",
+    "build": "ncc build index.js -o dist --minify --license licenses.txt && ncc build post.js -o dist/post --minify --license licenses.txt"
   },
   "repository": {
     "type": "git",

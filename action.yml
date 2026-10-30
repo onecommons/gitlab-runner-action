@@ -10,18 +10,33 @@ inputs:
     required: true
     default: 'https://gitlab.com/'
   registration-token:
-    description: 'Registration token'
-    required: true
+    description: 'Legacy registration token, or a glrt- token for backward compatibility'
+    required: false
+  runner-token:
+    description: 'Runner authentication token; configure tags and access settings in GitLab'
+    required: false
   name:
     description: 'Runner name'
     required: true
   tag-list:
-    description: 'Tag list to bind with the runner'
-    required: true
+    description: 'Runner tags for legacy registration tokens; ignored with authentication tokens'
+    required: false
   docker-image:
     description: 'Docker image used by runner'
     required: false
     default: 'docker:28.5.1'
+  runner-image:
+    description: 'GitLab Runner image; set a version or digest to pin it'
+    required: false
+    default: 'gitlab/gitlab-runner:latest'
+  docker-privileged:
+    description: 'Run Docker executor job and service containers in privileged mode'
+    required: false
+    default: 'true'
+  network-per-build:
+    description: 'Create a separate Docker network for each GitLab job'
+    required: false
+    default: 'false'
   run-untagged:
     description: "Parameter that allows or not to pick untagged jobs"
     required: false
@@ -45,3 +60,5 @@ inputs:
 runs:
   using: 'node24'
   main: 'dist/index.js'
+  post: 'dist/post/index.js'
+  post-if: 'always()'
