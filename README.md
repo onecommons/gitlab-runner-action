@@ -3,6 +3,8 @@ This action starts a gitlab runner and registers it with the given gitlab instan
 It can be configured to exit after the first job it receives or after a timeout.
 
 
+The action uses Node.js 24 and requires a Linux host with Docker.
+
 ## Action Inputs
 
 | Input Name | Description | Required | Enum Values | Default Value |
@@ -11,7 +13,7 @@ It can be configured to exit after the first job it receives or after a timeout.
 | `registration-token` | Registration token | Yes | N/A | N/A |
 | `name` | Runner name | Yes | N/A | N/A |
 | `tag-list` | Tag list to bind with the runner | Yes | N/A | N/A |
-| `docker-image` | Docker image used by runner | No | N/A | docker:19.03.12 |
+| `docker-image` | Docker image used by runner | No | N/A | docker:28.5.1 |
 | `run-untagged` | Parameter that allows or not to pick untagged jobs | No | true or false | true |
 | `access-level` | Parameter to create or not a protected runner | No | ref_protected or not_protected | not_protected |
 | `concurrent` | Maximum number of jobs that can run concurrently (automatically set to 1 if exit-after-job is true) | No | N/A | 4 |

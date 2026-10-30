@@ -21,7 +21,7 @@ inputs:
   docker-image:
     description: 'Docker image used by runner'
     required: false
-    default: 'docker:19.03.12'
+    default: 'docker:28.5.1'
   run-untagged:
     description: "Parameter that allows or not to pick untagged jobs"
     required: false
@@ -43,5 +43,5 @@ inputs:
     required: false
     default: 'false'
 runs:
-  using: 'node12'
+  using: 'node24'
   main: 'dist/index.js'

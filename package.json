@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "ncc build index.js -o dist"
+    "build": "ncc build index.js -o dist --minify --license licenses.txt"
   },
   "repository": {
     "type": "git",
@@ -22,8 +22,8 @@
   },
   "homepage": "https://github.com/onecommons/gitlab-runner-action#readme",
   "dependencies": {
-    "@actions/core": "^1.2.6",
-    "@actions/exec": "^1.0.4",
+    "@actions/core": "^3.0.1",
+    "@actions/exec": "^3.0.0",
     "@iarna/toml": "^2.2.5"
   },
   "devDependencies": {

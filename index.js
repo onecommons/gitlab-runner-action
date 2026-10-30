@@ -1,5 +1,5 @@
-const core = require('@actions/core');
-const { exec } = require('@actions/exec');
+let core;
+let exec;
 const path = require("path");
 const fs = require("fs");
 const TOML = require('@iarna/toml');
@@ -124,4 +124,10 @@ async function unregisterRunner() {
   await unregisterRunnerCmd()
 }
 
-registerRunner()
+Promise.all([import('@actions/core'), import('@actions/exec')])
+  .then(([actionCore, execution]) => {
+    core = actionCore;
+    exec = execution.exec;
+    return registerRunner();
+  })
+  .catch(error => { console.error(error.message); process.exitCode = 1; });
