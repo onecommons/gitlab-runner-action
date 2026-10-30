@@ -2,16 +2,50 @@
 This action starts a gitlab runner and registers it with the given gitlab instance.
 It can be configured to exit after the first job it receives or after a timeout.
 
+## Runner authentication tokens
+
+For a `glrt-` runner authentication token, create the project or group runner in
+GitLab first. Set its tags, protected access, and whether it accepts untagged jobs
+there. These settings cannot be changed during registration with an authentication
+token. The existing `registration-token` input also recognizes `glrt-` tokens.
+
+```yaml
+- name: Host a GitLab runner
+  uses: onecommons/gitlab-runner-action@main
+  with:
+    runner-token: ${{ secrets.GITLAB_RUNNER_TOKEN }}
+    gitlab-instance: https://gitlab.com/
+    name: runner-${{ github.run_id }}-${{ github.run_attempt }}
+    concurrent: '1'
+    network-per-build: 'true'
+    timeout: '10800'
+```
+
+This action needs a Linux host with Docker and access to `/var/run/docker.sock`.
+It uses Node.js 24. Set the enclosing job's timeout longer than the action's
+timeout to allow cleanup. Timed mode stays active for the configured duration;
+it does not monitor the GitLab pipeline result. Single-job mode exits after a
+successful or failed job, and does not wait for an entire pipeline.
+
+Each invocation uses a private config directory and a unique container name.
+Cleanup stops the container and unregisters its runner manager on completion or
+failure. A post-job hook retries cleanup after cancellation. With authentication
+tokens, the server-side runner remains available for subsequent workflow runs.
+
 
 ## Action Inputs
 
 | Input Name | Description | Required | Enum Values | Default Value |
 |-----------------|-------------|---------------|---------------|---------------|
 | `gitlab-instance` | Gitlab instance | No | N/A | https://gitlab.com/ |
-| `registration-token` | Registration token | Yes | N/A | N/A |
+| `runner-token` | Runner authentication token; use this or registration-token | No | N/A | N/A |
+| `registration-token` | Legacy registration token, or a glrt- token for compatibility | No | N/A | N/A |
 | `name` | Runner name | Yes | N/A | N/A |
-| `tag-list` | Tag list to bind with the runner | Yes | N/A | N/A |
-| `docker-image` | Docker image used by runner | No | N/A | docker:19.03.12 |
+| `tag-list` | Runner tags; required only with legacy registration tokens | No | N/A | N/A |
+| `docker-image` | Default job image, overridden by the GitLab job's image | No | N/A | docker:28.5.1 |
+| `runner-image` | GitLab Runner image; accepts a version or digest | No | N/A | gitlab/gitlab-runner:latest |
+| `docker-privileged` | Run job and service containers in privileged mode | No | true or false | true |
+| `network-per-build` | Create a separate Docker network for each GitLab job | No | true or false | false |
 | `run-untagged` | Parameter that allows or not to pick untagged jobs | No | true or false | true |
 | `access-level` | Parameter to create or not a protected runner | No | ref_protected or not_protected | not_protected |
 | `concurrent` | Maximum number of jobs that can run concurrently (automatically set to 1 if exit-after-job is true) | No | N/A | 4 |
