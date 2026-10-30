@@ -112,15 +112,34 @@ test('timed service waits until its deadline and detects a stopped runner', asyn
 
 test('single-job mode forces concurrency one and exits for successful or failed jobs', async t => {
   for (const message of ['Job succeeded', 'WARNING: Job failed: exit code 1']) {
-    const { runner, options } = fixture(t, { 'exit-after-job': 'true', concurrent: '4' });
+    const { runner, options, calls } = fixture(t, { 'exit-after-job': 'true', concurrent: '4' });
     assert.equal(options.concurrent, 1);
     await runner.start();
+    const run = calls.find(call => call.args[0] === 'run' && call.args.includes('--detach'));
+    assert.deepEqual(run.args.slice(-3), ['run', '--max-builds', '1']);
     runner.output = async (_, args) => ({
       exitCode: 0, stdout: args[0] === 'inspect' ? 'true' : '',
       stderr: args[0] === 'logs' ? message : ''
     });
     await runner.wait();
   }
+});
+
+test('single-job mode accepts only a completed job as an expected runner exit', async t => {
+  const { runner, calls } = fixture(t, { 'exit-after-job': 'true' });
+  await runner.start();
+  const run = calls.find(call => call.args[0] === 'run' && call.args.includes('--detach'));
+  assert.deepEqual(run.args.slice(-3), ['run', '--max-builds', '1']);
+
+  runner.output = async (_, args) => ({
+    exitCode: 0, stdout: args[0] === 'inspect' ? 'false' : 'Job failed: exit code 1', stderr: ''
+  });
+  await runner.wait();
+
+  runner.output = async (_, args) => ({
+    exitCode: 0, stdout: args[0] === 'inspect' ? 'false' : 'runner stopped', stderr: ''
+  });
+  await assert.rejects(runner.wait(), /stopped unexpectedly/);
 });
 
 test('registration and startup failures still allow scoped unregister cleanup', async t => {

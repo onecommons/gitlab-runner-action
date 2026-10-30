@@ -105,9 +105,11 @@ class Runner {
     config.concurrent = o.concurrent;
     fs.writeFileSync(configPath, TOML.stringify(config), { mode: 0o600 });
     fs.chmodSync(configPath, 0o600);
-    await this.exec('docker', ['run', '--detach', '--name', o.containerName,
+    const runArgs = ['run', '--detach', '--name', o.containerName,
       ...this.configMount(), '--volume', '/var/run/docker.sock:/var/run/docker.sock',
-      o.runnerImage]);
+      o.runnerImage];
+    if (o.exitAfterJob) runArgs.push('run', '--max-builds', '1');
+    await this.exec('docker', runArgs);
   }
 
   async wait() {
@@ -116,13 +118,20 @@ class Runner {
     while (this.now() < deadline) {
       const state = await this.output('docker', ['inspect', '--format', '{{.State.Running}}',
         o.containerName], { silent: true });
-      if (state.stdout.trim() !== 'true') throw new Error('The GitLab runner container stopped unexpectedly');
+      if (state.stdout.trim() !== 'true') {
+        if (o.exitAfterJob && await this.jobCompleted(o.containerName)) return;
+        throw new Error('The GitLab runner container stopped unexpectedly');
+      }
       if (o.exitAfterJob) {
-        const logs = await this.output('docker', ['logs', '--tail', '200', o.containerName], { silent: true });
-        if (/\bJob (succeeded|failed)\b/i.test(logs.stdout + logs.stderr)) return;
+        if (await this.jobCompleted(o.containerName)) return;
       }
       await this.sleep(Math.min(5000, deadline - this.now()));
     }
+  }
+
+  async jobCompleted(containerName) {
+    const logs = await this.output('docker', ['logs', '--tail', '200', containerName], { silent: true });
+    return /\bJob (succeeded|failed)\b/i.test(logs.stdout + logs.stderr);
   }
 
   async cleanup() {
