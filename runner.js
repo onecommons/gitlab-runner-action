@@ -94,7 +94,7 @@ class Runner {
       args.push('--tag-list', o.tags, '--locked=false',
         `--access-level=${o.accessLevel}`, `--run-untagged=${o.runUntagged}`);
     }
-    if (o.networkPerBuild) args.push('--environment', 'FF_NETWORK_PER_BUILD=1');
+    if (o.networkPerBuild) args.push('--env', 'FF_NETWORK_PER_BUILD=1');
     return { args, tokenEnv };
   }
 

@@ -94,7 +94,8 @@ test('start creates private isolated config, persists no secrets and sets actual
   assert.ok(!JSON.stringify(states).includes('glrt-'));
   const registration = calls.find(call => call.args.includes('register'));
   assert.equal(registration.settings.env.CI_SERVER_TOKEN, 'glrt-test');
-  assert.ok(registration.args.includes('FF_NETWORK_PER_BUILD=1'));
+  const ffIndex = registration.args.indexOf('FF_NETWORK_PER_BUILD=1');
+  assert.equal(registration.args[ffIndex - 1], '--env');
   assert.ok(registration.args.includes('--docker-privileged=true'));
   await runner.cleanup();
   assert.equal(fs.existsSync(options.configDir), false);
